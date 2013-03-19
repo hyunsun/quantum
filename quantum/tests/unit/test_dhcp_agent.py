@@ -78,11 +78,13 @@ fake_meta_fixed_ip = FakeModel('', subnet=fake_meta_subnet,
 fake_port1 = FakeModel('12345678-1234-aaaa-1234567890ab',
                        mac_address='aa:bb:cc:dd:ee:ff',
                        network_id='12345678-1234-5678-1234567890ab',
-                       fixed_ips=[fake_fixed_ip])
+                       fixed_ips=[fake_fixed_ip],
+                       device_owner=None)
 
 fake_port2 = FakeModel('12345678-1234-aaaa-123456789000',
                        mac_address='aa:bb:cc:dd:ee:99',
-                       network_id='12345678-1234-5678-1234567890ab')
+                       network_id='12345678-1234-5678-1234567890ab',
+                       device_owner=None)
 
 fake_meta_port = FakeModel('12345678-1234-aaaa-1234567890ab',
                            mac_address='aa:bb:cc:dd:ee:ff',
@@ -413,7 +415,6 @@ class TestDhcpAgentEventHandler(base.BaseTestCase):
                               'quantum.agent.linux.interface.NullDriver')
         config.register_root_helper(cfg.CONF)
         cfg.CONF.register_opts(dhcp_agent.DhcpAgent.OPTS)
-
         self.plugin_p = mock.patch('quantum.agent.dhcp_agent.DhcpPluginApi')
         plugin_cls = self.plugin_p.start()
         self.plugin = mock.Mock()
@@ -739,6 +740,20 @@ class TestDhcpAgentEventHandler(base.BaseTestCase):
              mock.call.put_port(mock.ANY)])
         self.call_driver.assert_called_once_with('reload_allocations',
                                                  fake_network)
+
+    def test_port_update_end_multihost(self):
+        cfg.CONF.set_override('enable_multi_host', True)
+        payload = dict(port=vars(fake_port2))
+        payload['port']['device_owner'] = 'compute:ttt'
+        payload['port']['binding:host_id'] = 'hostname_xxx'
+        self.cache.get_network_by_id.return_value = fake_network
+        with mock.patch.object(
+            self.dhcp, '_unlocked_port_delete_end') as mock_delete:
+            self.dhcp.port_update_end(None, payload)
+            delete_payload = {'port_id': payload['port']['id']}
+            mock_delete.assert_called_with(mock.ANY, delete_payload)
+        self.cache.assert_has_calls(
+            [mock.call.get_network_by_id(fake_port2.network_id)])
 
     def test_port_delete_end(self):
         payload = dict(port_id=fake_port2.id)

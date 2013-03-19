@@ -13,9 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import mock
+
+from quantum.api import extensions
+from quantum.api.rpc.agentnotifiers import dhcp_rpc_agent_api
+from quantum import context
 from quantum.extensions import portbindings
+from quantum.tests.unit import _test_extension_mutihost as test_mutihost
 from quantum.tests.unit import _test_extension_portbindings as test_bindings
+from quantum.tests.unit import test_agent_ext_plugin
 from quantum.tests.unit import test_db_plugin as test_plugin
+from quantum.tests.unit import test_extensions
+from quantum.tests.unit import test_l3_plugin
 from quantum.tests.unit import test_security_groups_rpc as test_sg_rpc
 
 
@@ -73,3 +82,22 @@ class TestOpenvswitchPortBindingHost(
     OpenvswitchPluginV2TestCase,
     test_bindings.PortBindingsHostTestCaseMixin):
     pass
+
+
+class TestOpenvswitchMultihost(test_agent_ext_plugin.AgentDBTestMixIn,
+                               test_l3_plugin.L3NatTestCaseMixin,
+                               test_mutihost.MultihostDbTestCaseMixin,
+                               OpenvswitchPluginV2TestCase):
+
+    def setUp(self):
+        self.dhcp_notifier = dhcp_rpc_agent_api.DhcpAgentNotifyAPI()
+        self.dhcp_notifier_cls_p = mock.patch(
+            'quantum.api.rpc.agentnotifiers.dhcp_rpc_agent_api.'
+            'DhcpAgentNotifyAPI')
+        self.dhcp_notifier_cls = self.dhcp_notifier_cls_p.start()
+        self.dhcp_notifier_cls.return_value = self.dhcp_notifier
+        super(TestOpenvswitchMultihost, self).setUp()
+        ext_mgr = extensions.PluginAwareExtensionManager.get_instance()
+        self.ext_api = test_extensions.setup_extensions_middleware(ext_mgr)
+        self.adminContext = context.get_admin_context()
+        self.addCleanup(self.dhcp_notifier_cls_p.stop)

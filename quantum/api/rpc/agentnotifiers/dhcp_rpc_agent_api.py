@@ -60,6 +60,14 @@ class DhcpAgentNotifyAPI(proxy.RpcProxy):
     def _notification(self, context, method, payload, network_id):
         """Notify all the agents that are hosting the network."""
         plugin = manager.QuantumManager.get_plugin()
+        if method != 'network_delete_end':
+            adminContext = (context if context.is_admin else
+                            context.elevated())
+            network = plugin.get_network(adminContext, network_id)
+            if network.get(constants.MULTIHOST):
+                self._notification_fanout(context, method, payload,
+                                          topic=topics.DHCP_MULTI_HOST)
+                return
         if (method != 'network_delete_end' and utils.is_extension_supported(
                 plugin, constants.AGENT_SCHEDULER_EXT_ALIAS)):
             if method == 'port_create_end':
@@ -87,12 +95,13 @@ class DhcpAgentNotifyAPI(proxy.RpcProxy):
             # when the network is deleted, so we need to fanout
             self._notification_fanout(context, method, payload)
 
-    def _notification_fanout(self, context, method, payload):
+    def _notification_fanout(self, context, method, payload,
+                             topic=topics.DHCP_AGENT):
         """Fanout the payload to all dhcp agents."""
         self.fanout_cast(
             context, self.make_msg(method,
                                    payload=payload),
-            topic=topics.DHCP_AGENT)
+            topic=topic)
 
     def network_removed_from_agent(self, context, network_id, host):
         self._notification_host(context, 'network_delete_end',

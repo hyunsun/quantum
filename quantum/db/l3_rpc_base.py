@@ -41,14 +41,22 @@ class L3RpcCallbackMixin(object):
         host = kwargs.get('host')
         context = quantum_context.get_admin_context()
         plugin = manager.QuantumManager.get_plugin()
-        if utils.is_extension_supported(
+        enable_multi_host = False
+        if utils.is_extension_supported(plugin, constants.AGENT_EXT_ALIAS):
+            agent = plugin.get_agent_by_type_and_host(
+                context, constants.AGENT_TYPE_L3, host)
+            enable_multi_host = agent['configurations'].get(
+                'enable_multi_host', False)
+        if enable_multi_host:
+            routers = plugin.get_sync_data(context, router_id, multi_host=True)
+        elif utils.is_extension_supported(
             plugin, constants.AGENT_SCHEDULER_EXT_ALIAS):
             if cfg.CONF.router_auto_schedule:
                 plugin.auto_schedule_routers(context, host, router_id)
             routers = plugin.list_active_sync_routers_on_active_l3_agent(
                 context, host, router_id)
         else:
-            routers = plugin.get_sync_data(context, router_id)
+            routers = plugin.get_sync_data(context, [router_id])
         LOG.debug(_("Routers returned to l3 agent:\n %s"),
                   jsonutils.dumps(routers, indent=5))
         return routers

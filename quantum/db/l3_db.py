@@ -848,7 +848,9 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                 router['gw_port'] = gw_port_id_gw_port_dict[gw_port_id]
         return routers
 
-    def _get_sync_routers(self, context, router_ids=None, active=None):
+    def _get_sync_routers(self, context, router_ids=None,
+                          active=None,
+                          filters=None):
         """Query routers and their gw ports for l3 agent.
 
         Query routers with the router_ids. The gateway ports, if any,
@@ -861,7 +863,9 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                            if it is None, all of routers will be queried.
         @return: a list of dicted routers with dicted gw_port populated if any
         """
-        filters = {'id': router_ids} if router_ids else {}
+        filters = filters if filters else {}
+        if router_ids:
+            filters['id'] = router_ids
         if active is not None:
             filters['admin_state_up'] = [active]
         router_dicts = self.get_routers(context, filters=filters)
@@ -961,12 +965,14 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                 router[l3_constants.INTERFACE_KEY] = router_interfaces
         return routers_dict.values()
 
-    def get_sync_data(self, context, router_ids=None, active=None):
+    def get_sync_data(self, context, router_ids=None, active=None,
+                      filters=None):
         """Query routers and their related floating_ips, interfaces."""
         with context.session.begin(subtransactions=True):
             routers = self._get_sync_routers(context,
                                              router_ids=router_ids,
-                                             active=active)
+                                             active=active,
+                                             filters=filters)
             router_ids = [router['id'] for router in routers]
             floating_ips = self._get_sync_floating_ips(context, router_ids)
             interfaces = self.get_sync_interfaces(context, router_ids)

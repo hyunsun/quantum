@@ -22,6 +22,7 @@ from eventlet import semaphore
 import netaddr
 from oslo.config import cfg
 
+from quantum.agent.common import agent_utils
 from quantum.agent.common import config
 from quantum.agent.linux import external_process
 from quantum.agent.linux import interface
@@ -29,6 +30,7 @@ from quantum.agent.linux import ip_lib
 from quantum.agent.linux import iptables_manager
 from quantum.agent.linux import utils
 from quantum.agent import rpc as agent_rpc
+from quantum.api.rpc.pluginapi import multihost_plugin_api
 from quantum.common import constants as l3_constants
 from quantum.common import topics
 from quantum.common import utils as common_utils
@@ -39,6 +41,7 @@ from quantum.openstack.common import log as logging
 from quantum.openstack.common import loopingcall
 from quantum.openstack.common import periodic_task
 from quantum.openstack.common.rpc import common as rpc_common
+from quantum.openstack.common.rpc import dispatcher as rpc_dispatcher
 from quantum.openstack.common.rpc import proxy
 from quantum.openstack.common import service
 from quantum import service as quantum_service
@@ -129,6 +132,9 @@ class RouterInfo(object):
 
     def ns_name(self):
         if self.use_namespaces:
+            network_id = self.router.get(l3_constants.MULTIHOST_NET)
+            if network_id:
+                return agent_utils.get_dhcp_namespace(network_id)
             return NS_PREFIX + self.router_id
 
     def perform_snat_action(self, snat_callback, *args):
@@ -171,6 +177,8 @@ class L3NATAgent(manager.Manager):
                           "by the agents.")),
         cfg.BoolOpt('enable_metadata_proxy', default=True,
                     help=_("Allow running metadata proxy.")),
+        cfg.BoolOpt('enable_multi_host', default=False,
+                    help=_("Support multi-host routers.")),
     ]
 
     def __init__(self, host, conf=None):
@@ -193,11 +201,13 @@ class L3NATAgent(manager.Manager):
 
         self.context = context.get_admin_context_without_session()
         self.plugin_rpc = L3PluginApi(topics.PLUGIN, host)
+        self.multihost_plugin_rpc = multihost_plugin_api.L3MultihostPluginApi(
+            topics.PLUGIN, host)
         self.fullsync = True
         self.sync_sem = semaphore.Semaphore(1)
-        if self.conf.use_namespaces:
+        if self.conf.use_namespaces and not self.conf.enable_multi_host:
             self._destroy_router_namespaces(self.conf.router_id)
-        super(L3NATAgent, self).__init__(host=self.conf.host)
+        super(L3NATAgent, self).__init__(host=host)
 
     def _destroy_router_namespaces(self, only_router_id=None):
         """Destroy router namespaces on the host to eliminate all stale
@@ -291,7 +301,7 @@ class L3NATAgent(manager.Manager):
                          '--state_path=%s' % self.conf.state_path,
                          '--metadata_port=%s' % self.conf.metadata_port]
             proxy_cmd.extend(config.get_log_args(
-                cfg.CONF, 'quantum-ns-metadata-proxy-%s.log' %
+                self.conf, 'quantum-ns-metadata-proxy-%s.log' %
                 router_info.router_id))
             return proxy_cmd
 
@@ -382,8 +392,18 @@ class L3NATAgent(manager.Manager):
             getattr(ri.iptables_manager.ipv4['nat'], action)(*rule)
         ri.iptables_manager.apply()
 
-    def process_router_floating_ips(self, ri, ex_gw_port):
+    def _get_floatingips(self, ri):
         floating_ips = ri.router.get(l3_constants.FLOATINGIP_KEY, [])
+        if not ri.router.get(l3_constants.MULTIHOST_NET):
+            return floating_ips
+        wanted_floating_ips = []
+        for floating_ip in floating_ips:
+            if self.host == floating_ip.get('binding:host_id'):
+                wanted_floating_ips.append(floating_ip)
+        return wanted_floating_ips
+
+    def process_router_floating_ips(self, ri, ex_gw_port):
+        floating_ips = self._get_floatingips(ri)
         existing_floating_ip_ids = set([fip['id'] for fip in ri.floating_ips])
         cur_floating_ip_ids = set([fip['id'] for fip in floating_ips])
 
@@ -424,7 +444,14 @@ class L3NATAgent(manager.Manager):
                     ri.floating_ips.append(new_fip)
 
     def _get_ex_gw_port(self, ri):
-        return ri.router.get('gw_port')
+        gw_port = ri.router.get('gw_port')
+        if (gw_port and ri.router.get(l3_constants.MULTIHOST_NET)):
+            if not ri.ex_gw_port:
+                gw_port = self.multihost_plugin_rpc.get_ex_gw_port_on_host(
+                    self.context, ri.router['id'])
+            else:
+                gw_port = ri.ex_gw_port
+        return gw_port
 
     def _send_gratuitous_arp_packet(self, ri, interface_name, ip_address):
         if self.conf.send_arp_for_ha > 0:
@@ -514,26 +541,30 @@ class L3NATAgent(manager.Manager):
 
     def internal_network_added(self, ri, network_id, port_id,
                                internal_cidr, mac_address):
-        interface_name = self.get_internal_device_name(port_id)
-        if not ip_lib.device_exists(interface_name,
-                                    root_helper=self.root_helper,
-                                    namespace=ri.ns_name()):
-            self.driver.plug(network_id, port_id, interface_name, mac_address,
-                             namespace=ri.ns_name(),
-                             prefix=INTERNAL_DEV_PREFIX)
+        if not ri.router.get(l3_constants.MULTIHOST_NET):
+            # We don't use router's interface device
+            interface_name = self.get_internal_device_name(port_id)
+            if not ip_lib.device_exists(interface_name,
+                                        root_helper=self.root_helper,
+                                        namespace=ri.ns_name()):
+                self.driver.plug(network_id, port_id,
+                                 interface_name, mac_address,
+                                 namespace=ri.ns_name(),
+                                 prefix=INTERNAL_DEV_PREFIX)
 
-        self.driver.init_l3(interface_name, [internal_cidr],
-                            namespace=ri.ns_name())
-        ip_address = internal_cidr.split('/')[0]
-        self._send_gratuitous_arp_packet(ri, interface_name, ip_address)
+            self.driver.init_l3(interface_name, [internal_cidr],
+                                namespace=ri.ns_name())
+            ip_address = internal_cidr.split('/')[0]
+            self._send_gratuitous_arp_packet(ri, interface_name, ip_address)
 
     def internal_network_removed(self, ri, port_id, internal_cidr):
-        interface_name = self.get_internal_device_name(port_id)
-        if ip_lib.device_exists(interface_name,
-                                root_helper=self.root_helper,
-                                namespace=ri.ns_name()):
-            self.driver.unplug(interface_name, namespace=ri.ns_name(),
-                               prefix=INTERNAL_DEV_PREFIX)
+        if not ri.router.get(l3_constants.MULTIHOST_NET):
+            interface_name = self.get_internal_device_name(port_id)
+            if ip_lib.device_exists(interface_name,
+                                    root_helper=self.root_helper,
+                                    namespace=ri.ns_name()):
+                self.driver.unplug(interface_name, namespace=ri.ns_name(),
+                                   prefix=INTERNAL_DEV_PREFIX)
 
     def internal_network_nat_rules(self, ex_gw_ip, internal_cidr):
         rules = [('snat', '-s %s -j SNAT --to-source %s' %
@@ -628,7 +659,9 @@ class L3NATAgent(manager.Manager):
         for r in routers:
             if not r['admin_state_up']:
                 continue
-
+            if (self.conf.enable_multi_host and
+                not r.get(l3_constants.MULTIHOST_NET)):
+                continue
             # If namespaces are disabled, only process the router associated
             # with the configured agent id.
             if (not self.conf.use_namespaces and
@@ -717,10 +750,11 @@ class L3NATAgentWithStateReport(L3NATAgent):
                 self.conf.handle_internal_only_routers,
                 'gateway_external_network_id':
                 self.conf.gateway_external_network_id,
-                'interface_driver': self.conf.interface_driver},
+                'interface_driver': self.conf.interface_driver,
+                'enable_multi_host': self.conf.enable_multi_host},
             'start_flag': True,
             'agent_type': l3_constants.AGENT_TYPE_L3}
-        report_interval = cfg.CONF.AGENT.report_interval
+        report_interval = self.conf.AGENT.report_interval
         if report_interval:
             self.heartbeat = loopingcall.FixedIntervalLoopingCall(
                 self._report_state)
@@ -762,6 +796,14 @@ class L3NATAgentWithStateReport(L3NATAgent):
         """Handle the agent_updated notification event."""
         self.fullsync = True
         LOG.info(_("agent_updated by server side %s!"), payload)
+
+    def initialize_service_hook(self, service):
+        if self.conf.enable_multi_host:
+            dispatcher = rpc_dispatcher.RpcDispatcher([self])
+            LOG.debug(_("Creating Consumer connection for Service %s"),
+                      topics.L3_MULTI_HOST)
+            service.conn.create_consumer(topics.L3_MULTI_HOST, dispatcher,
+                                         fanout=True)
 
 
 def main():

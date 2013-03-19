@@ -48,6 +48,15 @@ class L3AgentNotifyAPI(proxy.RpcProxy):
         adminContext = context.is_admin and context or context.elevated()
         plugin = manager.QuantumManager.get_plugin()
         for router in routers:
+            if router.get(constants.MULTIHOST_NET):
+                LOG.debug(_('Notify multihost agents the message '
+                            '%(method)s'),
+                          {'method': method})
+                self.fanout_cast(
+                    context, self.make_msg(method,
+                                           routers=[router]),
+                    topic=topics.L3_MULTI_HOST)
+                return
             l3_agents = plugin.get_l3_agents_hosting_routers(
                 adminContext, [router['id']],
                 admin_state_up=True,
@@ -66,11 +75,19 @@ class L3AgentNotifyAPI(proxy.RpcProxy):
     def _notification(self, context, method, routers, operation, data):
         """Notify all the agents that are hosting the routers."""
         plugin = manager.QuantumManager.get_plugin()
-        if utils.is_extension_supported(
-            plugin, constants.AGENT_SCHEDULER_EXT_ALIAS):
+        adminContext = (context if context.is_admin else
+                        context.elevated())
+        if (utils.is_extension_supported(
+            plugin, constants.AGENT_SCHEDULER_EXT_ALIAS) or
+            utils.is_extension_supported(
+            plugin, constants.AGENT_EXT_ALIAS)):
             adminContext = (context.is_admin and
                             context or context.elevated())
-            plugin.schedule_routers(adminContext, routers)
+            routers_to_schedule = []
+            for router in routers:
+                if not router.get(constants.MULTIHOST_NET):
+                    routers_to_schedule.append(router)
+            plugin.schedule_routers(adminContext, routers_to_schedule)
             self._agent_notification(
                 context, method, routers, operation, data)
         else:

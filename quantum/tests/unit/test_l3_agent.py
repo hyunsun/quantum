@@ -14,12 +14,14 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+# @author: Yong Sheng Gong, UnistedStack, Inc
 
 import copy
 
 import mock
 from oslo.config import cfg
 
+from quantum.agent.common import agent_utils
 from quantum.agent.common import config as agent_config
 from quantum.agent import l3_agent
 from quantum.agent.linux import interface
@@ -88,7 +90,7 @@ class TestBasicRouterOperations(base.BaseTestCase):
     def testRouterInfoCreate(self):
         id = _uuid()
         ri = l3_agent.RouterInfo(id, self.conf.root_helper,
-                                 self.conf.use_namespaces, None)
+                                 self.conf.use_namespaces, {'id': id})
 
         self.assertTrue(ri.ns_name().endswith(id))
 
@@ -113,12 +115,17 @@ class TestBasicRouterOperations(base.BaseTestCase):
     def testAgentCreate(self):
         l3_agent.L3NATAgent(HOSTNAME, self.conf)
 
-    def _test_internal_network_action(self, action):
+    def _test_internal_network_action(self, action, multihost=False):
         port_id = _uuid()
         router_id = _uuid()
         network_id = _uuid()
         ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
-                                 self.conf.use_namespaces, None)
+                                 self.conf.use_namespaces,
+                                 {'id': router_id})
+        if multihost:
+            self.conf.set_override('enable_multi_host', True)
+            ri.router[l3_constants.MULTIHOST_NET] = network_id
+
         agent = l3_agent.L3NATAgent(HOSTNAME, self.conf)
         cidr = '99.0.1.9/24'
         mac = 'ca:fe:de:ad:be:ef'
@@ -127,12 +134,14 @@ class TestBasicRouterOperations(base.BaseTestCase):
             self.device_exists.return_value = False
             agent.internal_network_added(ri, network_id,
                                          port_id, cidr, mac)
-            self.assertEqual(self.mock_driver.plug.call_count, 1)
-            self.assertEqual(self.mock_driver.init_l3.call_count, 1)
+            call_count = 0 if multihost else 1
+            self.assertEqual(self.mock_driver.plug.call_count, call_count)
+            self.assertEqual(self.mock_driver.init_l3.call_count, call_count)
         elif action == 'remove':
             self.device_exists.return_value = True
+            call_count = 0 if multihost else 1
             agent.internal_network_removed(ri, port_id, cidr)
-            self.assertEqual(self.mock_driver.unplug.call_count, 1)
+            self.assertEqual(self.mock_driver.unplug.call_count, call_count)
         else:
             raise Exception("Invalid action %s" % action)
 
@@ -142,10 +151,17 @@ class TestBasicRouterOperations(base.BaseTestCase):
     def testAgentRemoveInternalNetwork(self):
         self._test_internal_network_action('remove')
 
+    def testAgentAddInternalNetwork_multihost(self):
+        self._test_internal_network_action('add', multihost=True)
+
+    def testAgentRemoveInternalNetwork_multihost(self):
+        self._test_internal_network_action('remove', multihost=True)
+
     def _test_external_gateway_action(self, action):
         router_id = _uuid()
+        router = {'id': router_id}
         ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
-                                 self.conf.use_namespaces, None)
+                                 self.conf.use_namespaces, router)
         agent = l3_agent.L3NATAgent(HOSTNAME, self.conf)
         internal_cidrs = ['100.0.1.0/24', '200.74.0.0/16']
         ex_gw_port = {'fixed_ips': [{'ip_address': '20.0.0.30',
@@ -191,7 +207,8 @@ class TestBasicRouterOperations(base.BaseTestCase):
     def _test_floating_ip_action(self, action):
         router_id = _uuid()
         ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
-                                 self.conf.use_namespaces, None)
+                                 self.conf.use_namespaces,
+                                 {'id': router_id})
         agent = l3_agent.L3NATAgent(HOSTNAME, self.conf)
         floating_ip = '20.0.0.100'
         fixed_ip = '10.0.0.23'
@@ -247,7 +264,7 @@ class TestBasicRouterOperations(base.BaseTestCase):
         router_id = _uuid()
         ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
                                  self.conf.use_namespaces,
-                                 None)
+                                 {'id': router_id})
         agent = l3_agent.L3NATAgent(HOSTNAME, self.conf)
 
         fake_route1 = {'destination': '135.207.0.0/16',
@@ -295,7 +312,7 @@ class TestBasicRouterOperations(base.BaseTestCase):
 
         ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
                                  self.conf.use_namespaces,
-                                 None)
+                                 {'id': router_id})
         ri.router = {}
 
         fake_old_routes = []
@@ -329,6 +346,71 @@ class TestBasicRouterOperations(base.BaseTestCase):
         expected = [['ip', 'route', 'delete', 'to', '110.100.30.0/24',
                     'via', '10.100.10.30']]
         self._check_agent_method_called(agent, expected, namespace)
+
+    def testProcessRouter_multihost(self):
+        self.conf.set_override('enable_multi_host', True)
+        router_id = _uuid()
+        internal_network_id = _uuid()
+        external_network_id = _uuid()
+        external_subnet_id = _uuid()
+        ex_gw_port = {'id': _uuid(),
+                      'network_id': external_network_id,
+                      'fixed_ips': [{'ip_address': '19.4.4.4',
+                                     'subnet_id': external_subnet_id}],
+                      'subnet': {'cidr': '19.4.4.0/24',
+                                 'gateway_ip': '19.4.4.1'}}
+        ex_gw_port_host = {'id': _uuid(),
+                           'network_id': external_network_id,
+                           'fixed_ips': [{'ip_address': '19.4.4.5',
+                                          'subnet_id': external_subnet_id}],
+                           'subnet': {'cidr': '19.4.4.0/24',
+                                      'gateway_ip': '19.4.4.1'}}
+        internal_port = {'id': _uuid(),
+                         'network_id': internal_network_id,
+                         'admin_state_up': True,
+                         'fixed_ips': [{'ip_address': '35.4.4.4',
+                                        'subnet_id': _uuid()}],
+                         'mac_address': 'ca:fe:de:ad:be:ef',
+                         'subnet': {'cidr': '35.4.4.0/24',
+                                    'gateway_ip': '35.4.4.1'}}
+
+        fake_floatingips = {'floatingips': [
+            {'id': _uuid(),
+             'floating_ip_address': '8.8.8.8',
+             'fixed_ip_address': '7.7.7.7',
+             'port_id': _uuid(),
+             'binding:host_id': HOSTNAME},
+            {'id': _uuid(),
+             'floating_ip_address': '8.8.8.10',
+             'fixed_ip_address': '7.7.7.10',
+             'port_id': _uuid()}]}
+
+        router = {
+            'id': router_id,
+            l3_constants.FLOATINGIP_KEY: fake_floatingips['floatingips'],
+            l3_constants.INTERFACE_KEY: [internal_port],
+            'routes': [],
+            'gw_port': ex_gw_port,
+            l3_constants.MULTIHOST_NET: internal_network_id}
+        ri = l3_agent.RouterInfo(router_id, self.conf.root_helper,
+                                 self.conf.use_namespaces, router=router)
+        self.assertEqual(agent_utils.get_dhcp_namespace(internal_network_id),
+                         ri.ns_name())
+        agent = l3_agent.L3NATAgent(HOSTNAME, self.conf)
+        with mock.patch.object(agent.multihost_plugin_rpc,
+                               'get_ex_gw_port_on_host',
+                               autospec=True) as mock_host_gw_port:
+            mock_host_gw_port.return_value = ex_gw_port_host
+            with mock.patch.object(
+                agent, 'floating_ip_added') as mock_floating_add:
+                agent.process_router(ri)
+                expected_calls = [
+                    mock.call(ri,
+                              ex_gw_port_host,
+                              '8.8.8.8',
+                              '7.7.7.7')]
+                self.assertEqual(expected_calls,
+                                 mock_floating_add.call_args_list)
 
     def _verify_snat_rules(self, rules, router):
         interfaces = router[l3_constants.INTERFACE_KEY]
@@ -596,7 +678,8 @@ class TestL3AgentEventHandler(base.BaseTestCase):
         cfg.CONF.set_override('debug', True)
 
         router_info = l3_agent.RouterInfo(
-            router_id, cfg.CONF.root_helper, cfg.CONF.use_namespaces, None
+            router_id, cfg.CONF.root_helper, cfg.CONF.use_namespaces,
+            {'id': router_id}
         )
 
         self.external_process_p.stop()

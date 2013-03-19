@@ -34,7 +34,17 @@ class DhcpRpcCallbackMixin(object):
         host = kwargs.get('host')
         LOG.debug(_('Network list requested from %s'), host)
         plugin = manager.QuantumManager.get_plugin()
-        if utils.is_extension_supported(
+        enable_multi_host = False
+        if utils.is_extension_supported(plugin, constants.AGENT_EXT_ALIAS):
+            agent = plugin.get_agent_by_type_and_host(
+                context, constants.AGENT_TYPE_DHCP, host)
+            enable_multi_host = agent['configurations'].get(
+                'enable_multi_host', False)
+        if enable_multi_host:
+            filters = {'admin_state_up': [True],
+                       constants.MULTIHOST: [True]}
+            nets = plugin.get_networks(context, filters=filters)
+        elif utils.is_extension_supported(
             plugin, constants.AGENT_SCHEDULER_EXT_ALIAS):
             if cfg.CONF.network_auto_schedule:
                 plugin.auto_schedule_networks(context, host)
@@ -54,10 +64,26 @@ class DhcpRpcCallbackMixin(object):
                                   'host': host})
         plugin = manager.QuantumManager.get_plugin()
         network = plugin.get_network(context, network_id)
-
         filters = dict(network_id=[network_id])
         network['subnets'] = plugin.get_subnets(context, filters=filters)
-        network['ports'] = plugin.get_ports(context, filters=filters)
+        ports = plugin.get_ports(context, filters=filters)
+        enable_multi_host = False
+        if utils.is_extension_supported(plugin, constants.AGENT_EXT_ALIAS):
+            agent = plugin.get_agent_by_type_and_host(
+                context, constants.AGENT_TYPE_DHCP, host)
+            enable_multi_host = agent['configurations'].get(
+                'enable_multi_host', False)
+        if enable_multi_host:
+            wanted_ports = []
+            for port in ports:
+                device_owner = port.get('device_owner')
+                if (device_owner and device_owner.startswith('compute:') and
+                    host != port.get('binding:host_id')):
+                    continue
+                wanted_ports.append(port)
+            network['ports'] = wanted_ports
+        else:
+            network['ports'] = ports
         return network
 
     def get_dhcp_port(self, context, **kwargs):

@@ -201,6 +201,8 @@ class TestBase(base.BaseTestCase):
                        default='$state_path/dhcp/lease_relay'))
         self.conf.register_opt(cfg.BoolOpt('enable_isolated_metadata',
                                            default=True))
+        self.conf.register_opt(cfg.BoolOpt('enable_multi_host',
+                                           default=False))
         self.conf(args=args)
         self.conf.set_override('state_path', '')
         self.conf.use_namespaces = True
@@ -492,6 +494,25 @@ tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
             dm._output_opts_file()
 
         self.safe.assert_called_once_with('/foo/opts', expected)
+
+    def test_output_opts_file_multihost(self):
+        self.conf.set_override('enable_multi_host', True)
+        expected = """
+tag:tag0,option:dns-server,8.8.8.8
+tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
+tag:tag0,option:router,192.168.0.4""".lstrip()
+        with mock.patch('quantum.agent.linux.ip_lib.IPDevice') as ip_dev:
+            ip_dev.return_value.addr.list.return_value = [
+                {'cidr': '192.168.0.4/24'}
+            ]
+            with mock.patch.object(dhcp.Dnsmasq,
+                                   'get_conf_file_name') as conf_fn:
+                conf_fn.return_value = '/foo/opts'
+                dm = dhcp.Dnsmasq(self.conf, FakeV4Network(),
+                                  version=float(2.59))
+                dm._output_opts_file()
+
+            self.safe.assert_called_once_with('/foo/opts', expected)
 
     def test_output_opts_file_single_dhcp(self):
         expected = """

@@ -358,8 +358,7 @@ class Dnsmasq(DhcpLocalProcess):
     def _output_opts_file(self):
         """Write a dnsmasq compatible options file."""
 
-        if self.conf.enable_isolated_metadata:
-            subnet_to_interface_ip = self._make_subnet_interface_ip_map()
+        subnet_to_interface_ip = self._make_subnet_interface_ip_map()
 
         options = []
         for i, subnet in enumerate(self.network.subnets):
@@ -372,15 +371,14 @@ class Dnsmasq(DhcpLocalProcess):
 
             host_routes = ["%s,%s" % (hr.destination, hr.nexthop)
                            for hr in subnet.host_routes]
-
+            subnet_dhcp_ip = subnet_to_interface_ip.get(subnet.id)
             # Add host routes for isolated network segments
             enable_metadata = (
                 self.conf.enable_isolated_metadata
                 and not subnet.gateway_ip
                 and subnet.ip_version == 4)
 
-            if enable_metadata:
-                subnet_dhcp_ip = subnet_to_interface_ip[subnet.id]
+            if enable_metadata and subnet_dhcp_ip:
                 host_routes.append(
                     '%s/32,%s' % (METADATA_DEFAULT_IP, subnet_dhcp_ip)
                 )
@@ -392,13 +390,18 @@ class Dnsmasq(DhcpLocalProcess):
 
             if subnet.ip_version == 4:
                 if subnet.gateway_ip:
-                    options.append(self._format_option(i, 'router',
-                                                       subnet.gateway_ip))
+                    if self.conf.enable_multi_host and subnet_dhcp_ip:
+                        options.append(self._format_option(i, 'router',
+                                                           subnet_dhcp_ip))
+                    else:
+                        options.append(self._format_option(i, 'router',
+                                                           subnet.gateway_ip))
                 else:
                     options.append(self._format_option(i, 'router'))
-
+        options_str = '\n'.join(options)
+        LOG.debug(_('dnsmasq option file contents: %s'), options_str)
         name = self.get_conf_file_name('opts')
-        utils.replace_file(name, '\n'.join(options))
+        utils.replace_file(name, options_str)
         return name
 
     def _make_subnet_interface_ip_map(self):

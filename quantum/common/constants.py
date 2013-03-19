@@ -71,4 +71,11 @@ PAGINATION_INFINITE = 'infinite'
 SORT_DIRECTION_ASC = 'asc'
 SORT_DIRECTION_DESC = 'desc'
 
+AGENT_EXT_ALIAS = 'agent'
 AGENT_SCHEDULER_EXT_ALIAS = 'agent_scheduler'
+
+MULTIHOST_EXT_ALIAS = 'multihost'
+MULTIHOST = 'multihost:multi_host'
+MULTIHOST_NET = 'multihost:network_id'
+MULTIHOST_OWNER_DEVICE_ROUTER_GW = (DEVICE_OWNER_ROUTER_GW +
+                                    ':multihost')

@@ -131,6 +131,11 @@ class AgentDbMixin(ext_agent.AgentPluginBase):
         agent = self._get_agent(context, id)
         return self._make_agent_dict(agent, fields)
 
+    def get_agent_by_type_and_host(self, context, agent_type, host):
+        agent = self._get_agent_by_type_and_host(context,
+                                                 agent_type, host)
+        return self._make_agent_dict(agent)
+
     def create_or_update_agent(self, context, agent):
         """Create or update agent according to report."""
         with context.session.begin(subtransactions=True):

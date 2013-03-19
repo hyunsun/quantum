@@ -39,6 +39,7 @@ from quantum.openstack.common import importutils
 from quantum.openstack.common import jsonutils
 from quantum.openstack.common import log as logging
 from quantum.openstack.common import loopingcall
+from quantum.openstack.common.rpc import dispatcher as rpc_dispatcher
 from quantum.openstack.common.rpc import proxy
 from quantum.openstack.common import service
 from quantum.openstack.common import uuidutils
@@ -62,6 +63,8 @@ class DhcpAgent(manager.Manager):
                     help=_("Allow overlapping IP.")),
         cfg.BoolOpt('enable_isolated_metadata', default=False,
                     help=_("Support Metadata requests on isolated networks.")),
+        cfg.BoolOpt('enable_multi_host', default=False,
+                    help=_("Support multi-host networks.")),
         cfg.BoolOpt('enable_metadata_network', default=False,
                     help=_("Allows for serving metadata requests from a "
                            "dedicated network. Requires "
@@ -76,7 +79,8 @@ class DhcpAgent(manager.Manager):
         self.root_helper = config.get_root_helper(self.conf)
         self.dhcp_driver_cls = importutils.import_class(self.conf.dhcp_driver)
         ctx = context.get_admin_context_without_session()
-        self.plugin_rpc = DhcpPluginApi(topics.PLUGIN, ctx)
+        self.plugin_rpc = DhcpPluginApi(topics.PLUGIN, ctx,
+                                        self.host)
         self.device_manager = DeviceManager(self.conf, self.plugin_rpc)
         self.lease_relay = DhcpLeaseRelay(self.update_lease)
 
@@ -102,6 +106,14 @@ class DhcpAgent(manager.Manager):
                   "list of existing networks"),
                 self.conf.dhcp_driver
             )
+
+    def initialize_service_hook(self, service):
+        if self.conf.enable_multi_host:
+            dispatcher = rpc_dispatcher.RpcDispatcher([self])
+            LOG.debug(_("Creating Consumer connection for Service %s"),
+                      topics.DHCP_MULTI_HOST)
+            service.conn.create_consumer(topics.DHCP_MULTI_HOST, dispatcher,
+                                         fanout=True)
 
     def after_start(self):
         self.run()
@@ -276,6 +288,13 @@ class DhcpAgent(manager.Manager):
         port = DictModel(payload['port'])
         network = self.cache.get_network_by_id(port.network_id)
         if network:
+            device_owner = port.device_owner
+            if (self.conf.enable_multi_host and device_owner
+                and device_owner.startswith('compute:') and
+                self.host != getattr(port, 'binding:host_id', None)):
+                self._unlocked_port_delete_end(context,
+                                               {'port_id': port.id})
+                return
             self.cache.put_port(port)
             self.call_driver('reload_allocations', network)
 
@@ -285,6 +304,9 @@ class DhcpAgent(manager.Manager):
     @utils.synchronized('dhcp-agent')
     def port_delete_end(self, context, payload):
         """Handle the port.delete.end notification event."""
+        self._unlocked_port_delete_end(context, payload)
+
+    def _unlocked_port_delete_end(self, context, payload):
         port = self.cache.get_port_by_id(payload['port_id'])
         if port:
             network = self.cache.get_network_by_id(port.network_id)
@@ -353,11 +375,11 @@ class DhcpPluginApi(proxy.RpcProxy):
 
     BASE_RPC_API_VERSION = '1.0'
 
-    def __init__(self, topic, context):
+    def __init__(self, topic, context, host=None):
         super(DhcpPluginApi, self).__init__(
             topic=topic, default_version=self.BASE_RPC_API_VERSION)
         self.context = context
-        self.host = cfg.CONF.host
+        self.host = host if host else cfg.CONF.host
 
     def get_active_networks(self):
         """Make a remote process call to retrieve the active networks."""
@@ -739,7 +761,8 @@ class DhcpAgentWithStateReport(DhcpAgent):
             'configurations': {
                 'dhcp_driver': cfg.CONF.dhcp_driver,
                 'use_namespaces': cfg.CONF.use_namespaces,
-                'dhcp_lease_time': cfg.CONF.dhcp_lease_time},
+                'dhcp_lease_time': cfg.CONF.dhcp_lease_time,
+                'enable_multi_host': cfg.CONF.enable_multi_host},
             'start_flag': True,
             'agent_type': constants.AGENT_TYPE_DHCP}
         report_interval = cfg.CONF.AGENT.report_interval

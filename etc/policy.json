@@ -8,6 +8,12 @@
     "external": "field:networks:router:external=True",
     "default": "rule:admin_or_owner",
 
+    "extension:multihost_net:view": "rule:admin_only",
+    "extension:multihost_net:set": "rule:admin_only",
+
+    "extension:multihost_router:view": "rule:admin_only",
+    "extension:multihost_router:set": "rule:admin_only",
+
     "subnets:private:read": "rule:admin_or_owner",
     "subnets:private:write": "rule:admin_or_owner",
     "subnets:shared:read": "rule:regular_user",
