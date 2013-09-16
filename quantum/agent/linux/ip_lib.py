@@ -350,6 +350,26 @@ class IpRouteCommand(IpDeviceCommandBase):
 
         return retval
 
+    def exist_route(self, ip_cidr):
+        output = self._as_root('show', ip_cidr) 
+        if not output:
+            return False
+        else:
+            return True
+
+    def add_route(self, ip_cidr):
+        if self.exist_route(ip_cidr):
+            self._as_root('chg', ip_cidr, 'dev', self.name)
+        else:
+            self._as_root('add', ip_cidr, 'dev', self.name)
+
+    def del_route(self, ip_cidr):
+        if self.exist_route(ip_cidr):
+            self._as_root('del', ip_cidr)
+
+    def flush_route(self, ip_cidr):
+        self._as_root('flush', 'root', ip_cidr)
+
     def pullup_route(self, interface_name):
         """
         Ensures that the route entry for the interface is before all
