@@ -409,6 +409,9 @@ class Dnsmasq(DhcpLocalProcess):
                                                            subnet.gateway_ip))
                 else:
                     options.append(self._format_option(i, 'router'))
+            # set VM's IP with /32 mask
+            options.append(self._format_option(i, 'netmask', '255.255.255.255'))
+
         options_str = '\n'.join(options)
         LOG.debug(_('dnsmasq option file contents: %s'), options_str)
         name = self.get_conf_file_name('opts')
