@@ -499,6 +499,13 @@ class NetworkCache(object):
                 if port.id == port_id:
                     return port
 
+    def get_subnet_by_id(self, subnet_id):
+        network = self.get_network_by_subnet_id(subnet_id)
+        if network:
+            for subnet in network.subnets:
+                if subnet.id == subnet_id:
+                    return subnet
+
     def get_state(self):
         net_ids = self.get_network_ids()
         num_nets = len(net_ids)
@@ -547,6 +554,11 @@ class DeviceManager(object):
 
         host_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname())
         return 'dhcp%s-%s' % (host_uuid, network.id)
+
+    def get_dhcp_port(self, network):
+        device_id = self.get_device_id(network)
+        port = self.plugin.get_dhcp_port(network.id, device_id)
+        return port
 
     def setup(self, network, reuse_existing=False):
         """Create and initialize a device for network's DHCP on this host."""
@@ -744,6 +756,167 @@ class DhcpAgentWithStateReport(DhcpAgent):
     def after_start(self):
         LOG.info(_("DHCP agent started"))
 
+class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
+    def __init__(self, host=None):
+        LOG.info(_('Starting DHCP agent with static route'))
+        super(DhcpAgentWithStaticRoute, self).__init__(host=host)
+
+    def sync_state(self):
+        """Sync the local DHCP and static route state with Quantum."""
+        super(DhcpAgentWithStaticRoute, self).sync_state()
+        LOG.info(_('Synchronizing static routes'))
+
+        try:
+            active_networks = set(self.plugin_rpc.get_active_networks())
+            for network_id in active_networks:
+                self.refresh_static_route(network_id)
+        except:
+            self.needs_resync = True
+            LOG.exception(_('Unable to sync static routes'))
+
+    def enable_dhcp_helper(self, network_id):
+        """Enable DHCP for a network that meets enabling criteria."""
+        try:
+            network = self.plugin_rpc.get_network_info(network_id)
+        except:
+            self.needs_resync = True
+            LOG.exception(_('Network %s RPC info call failed.'), network_id)
+            return
+
+        if not network.admin_state_up:
+            return
+
+        for subnet in network.subnets:
+            if subnet.enable_dhcp:
+                if self.call_driver('enable', network):
+                    if (self.conf.use_namespaces and 
+                        self.conf.enable_isolated_metadata):
+                        self.enable_isolated_metadata_proxy(network)
+                    self.cache.put(network)
+                    self.setup_dhcp_static_route(network)
+                break
+
+    def refresh_dhcp_helper(self, network_id):
+        """Refresh or disable DHCP for a network depending on the current state
+        of the network.
+
+        """
+        old_network = self.cache.get_network_by_id(network_id)
+        if not old_network:
+            # DHCP current not running for network.
+            return self.enable_dhcp_helper(network_id)
+
+        try:
+            network = self.plugin_rpc.get_network_info(network_id)
+        except:
+            self.needs_resync = True
+            LOG.exception(_('Network %s RPC info call failed.'), network_id)
+            return
+
+        old_cidrs = set(s.cidr for s in old_network.subnets if s.enable_dhcp)
+        new_cidrs = set(s.cidr for s in network.subnets if s.enable_dhcp)
+
+        if new_cidrs and old_cidrs == new_cidrs:
+            self.call_driver('reload_allocations', network)
+            self.cache.put(network)
+        elif new_cidrs:
+            if self.call_driver('restart', network):
+                self.cache.put(network)
+                self.setup_dhcp_static_route(network)
+        else:
+            self.disable_dhcp_helper(network.id)
+
+    @lockutils.synchronized('agent', 'dhcp-')
+    def subnet_delete_end(self, context, payload):
+        """Remove all the static routes for the subnet."""
+        subnet_id = payload['subnet_id']
+        network = self.cache.get_network_by_subnet_id(subnet_id)
+        if network:
+            subnet = self.cache.get_subnet_by_id(subnet_id)
+            if subnet:
+                self.flush_static_route(network, subnet)
+            self.refresh_dhcp_helper(network.id)
+
+    @lockutils.synchronized('agent', 'dhcp-')
+    def port_update_end(self, context, payload):
+        """Handle the port.update.end notification event."""
+        port = DictModel(payload['port'])
+        network = self.cache.get_network_by_id(port.network_id)
+        if network:
+            device_owner = port.device_owner
+            if (self.conf.enable_multi_host and device_owner
+                and device_owner.startswith('compute:') and
+                self.host != getattr(port, 'binding:host_id', None)):
+                self._unlocked_port_delete_end(context,
+                                               {'port_id': port.id})
+                return
+            self.cache.put_port(port)
+            self.call_driver('reload_allocations', network)
+            self.add_static_route(network, port)
+
+    # Use the update handler for the port create event.
+    port_create_end = port_update_end
+
+    def _unlocked_port_delete_end(self, context, payload):
+        port = self.cache.get_port_by_id(payload['port_id'])
+        if port:
+            network = self.cache.get_network_by_id(port.network_id)
+            self.delete_static_route(network, port)
+            self.cache.remove_port(port)
+            self.call_driver('reload_allocations', network)
+
+    def add_static_route(self, network, port=None):
+        """Add static host route to DHCP interface for VM's fixed IPs"""
+        dhcp_interface_name = self.device_manager.get_interface_name(network)
+        device = ip_lib.IPDevice(dhcp_interface_name,
+                                 self.root_helper)
+        ports = [port] if port else network.ports
+        for port in ports:
+            if port.device_owner.startswith('network:'):
+                continue
+            for fixed_ip in port.fixed_ips:
+                device.route.add_route(fixed_ip.ip_address + '/32')
+
+    def delete_static_route(self, network, port):
+        """Delete static route to DHCP interface for deleted port"""
+        dhcp_interface_name = self.device_manager.get_interface_name(network)
+        device = ip_lib.IPDevice(dhcp_interface_name,
+                                 self.root_helper)
+        for fixed_ip in port.fixed_ips:
+            device.route.del_route(fixed_ip.ip_address + '/32')
+
+    def flush_static_route(self, network, subnet=None):
+        """Flush all static routes"""
+        dhcp_interface_name = self.device_manager.get_interface_name(network)
+        device = ip_lib.IPDevice(dhcp_interface_name,
+                                 self.root_helper)
+        subnets = [subnet] if subnet else network.subnets
+        for subnet in subnets:
+            device.route.flush_route(subnet.cidr)
+
+    def refresh_static_route(self, network_id):
+        """Refresh /32 IP static routes in this host"""
+        try:
+            network = self.plugin_rpc.get_network_info(network_id)
+        except:
+            self.needs_resync = True
+            LOG.exception(_('Network %s RPC info call failed.'), network_id)
+            return
+        self.flush_static_route(network)
+        self.setup_dhcp_static_route(network)
+        self.add_static_route(network)
+
+    def setup_dhcp_static_route(self, network):
+        """Get DHCP server IP and add /32 mask static route for it"""
+        dhcp_interface_name = self.device_manager.get_interface_name(network)
+        dhcp_port = self.device_manager.get_dhcp_port(network)
+
+        # Delete subnet route and add /32 netmask static route instead
+        device = ip_lib.IPDevice(dhcp_interface_name,
+                                 self.root_helper)
+        for fixed_ip in dhcp_port.fixed_ips:
+            device.route.del_route(fixed_ip.subnet.cidr)
+            device.route.add_route(fixed_ip.ip_address + '/32')
 
 def main():
     eventlet.monkey_patch()
@@ -760,5 +933,5 @@ def main():
         binary='quantum-dhcp-agent',
         topic=topics.DHCP_AGENT,
         report_interval=cfg.CONF.AGENT.report_interval,
-        manager='quantum.agent.dhcp_agent.DhcpAgentWithStateReport')
+        manager='quantum.agent.dhcp_agent.DhcpAgentWithStaticRoute')
     service.launch(server).wait()
