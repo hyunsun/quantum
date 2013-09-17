@@ -400,15 +400,15 @@ class Dnsmasq(DhcpLocalProcess):
                                         ','.join(host_routes)))
 
             if subnet.ip_version == 4:
-                if subnet.gateway_ip:
-                    if self.conf.enable_multi_host and subnet_dhcp_ip:
-                        options.append(self._format_option(i, 'router',
-                                                           subnet_dhcp_ip))
-                    else:
+                if self.conf.enable_multi_host and subnet_dhcp_ip:
+                    options.append(self._format_option(i, 'router',
+                                                       subnet_dhcp_ip))
+                else:
+                    if subnet.gateway_ip:
                         options.append(self._format_option(i, 'router',
                                                            subnet.gateway_ip))
-                else:
-                    options.append(self._format_option(i, 'router'))
+                    else:
+                        options.append(self._format_option(i, 'router'))
             # set VM's IP with /32 mask
             options.append(self._format_option(i, 'netmask', '255.255.255.255'))
 

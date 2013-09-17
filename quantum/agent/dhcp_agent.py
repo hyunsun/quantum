@@ -198,8 +198,7 @@ class DhcpAgent(manager.Manager):
         for subnet in network.subnets:
             if subnet.enable_dhcp:
                 if self.call_driver('enable', network):
-                    if (self.conf.use_namespaces and
-                        self.conf.enable_isolated_metadata):
+                    if self.conf.enable_isolated_metadata:
                         self.enable_isolated_metadata_proxy(network)
                     self.cache.put(network)
                 break
@@ -208,8 +207,7 @@ class DhcpAgent(manager.Manager):
         """Disable DHCP for a network known to the agent."""
         network = self.cache.get_network_by_id(network_id)
         if network:
-            if (self.conf.use_namespaces and
-                self.conf.enable_isolated_metadata):
+            if self.conf.enable_isolated_metadata:
                 self.disable_isolated_metadata_proxy(network)
             if self.call_driver('disable', network):
                 self.cache.remove(network)
@@ -593,8 +591,7 @@ class DeviceManager(object):
             ip_cidr = '%s/%s' % (fixed_ip.ip_address, net.prefixlen)
             ip_cidrs.append(ip_cidr)
 
-        if (self.conf.enable_isolated_metadata and
-            self.conf.use_namespaces):
+        if self.conf.enable_isolated_metadata:
             ip_cidrs.append(METADATA_DEFAULT_IP)
 
         self.driver.init_l3(interface_name, ip_cidrs,
@@ -789,8 +786,7 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
         for subnet in network.subnets:
             if subnet.enable_dhcp:
                 if self.call_driver('enable', network):
-                    if (self.conf.use_namespaces and 
-                        self.conf.enable_isolated_metadata):
+                    if self.conf.enable_isolated_metadata:
                         self.enable_isolated_metadata_proxy(network)
                     self.cache.put(network)
                     self.setup_dhcp_static_route(network)
