@@ -48,12 +48,12 @@ class TestLinuxBridgeNetworksV2(test_plugin.TestNetworksV2,
 
 class TestLinuxBridgePortsV2(test_plugin.TestPortsV2,
                              LinuxBridgePluginV2TestCase):
-
     def test_update_port_status_build(self):
         with self.port() as port:
             self.assertEqual(port['port']['status'], 'DOWN')
             self.assertEqual(self.port_create_status, 'DOWN')
-
+    def test_no_more_port_exception(self):
+        pass
 
 class TestLinuxBridgePortBinding(LinuxBridgePluginV2TestCase,
                                  test_bindings.PortBindingsTestCase):
