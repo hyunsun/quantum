@@ -73,6 +73,8 @@ class DhcpAgent(manager.Manager):
                     help=_("Name of network to be used for metadata service. "
                            "This option requires enable_isolated_metadata = True"
                            "and use_namespaces = False")),
+        cfg.ListOpt('enabled_networks', default=[],
+                    help=_("Name of networks to be handled in this agent."))
     ]
 
     def __init__(self, host=None):
@@ -763,19 +765,39 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
     def __init__(self, host=None):
         LOG.info(_('Starting DHCP agent with static route'))
         super(DhcpAgentWithStaticRoute, self).__init__(host=host)
+        self.enabled_networks = cfg.CONF.enabled_networks
+
+    def _is_enabled_network(self, network_id):
+        """Return networks enabled in this host."""
+        try:
+            network = self.plugin_rpc.get_network_info(network_id)
+        except:
+            self.needs_resync = True
+            LOG.exception(_('Network %s RPC info call failed.'), network_id)
+            return
+
+        for enabled_network in self.enabled_networks:
+            if enabled_network == network.name:
+                return True
+        return False
 
     def sync_state(self):
         """Sync the local DHCP and static route state with Quantum."""
-        super(DhcpAgentWithStaticRoute, self).sync_state()
-        LOG.info(_('Synchronizing static routes'))
+        LOG.info(_('Synchronizing enabled network state.'))
+        known_networks = set(self.cache.get_network_ids())
 
         try:
             active_networks = set(self.plugin_rpc.get_active_networks())
+            for deleted_id in known_networks - active_networks:
+                self.disable_dhcp_helper(deleted_id)
+
             for network_id in active_networks:
-                self.refresh_static_route(network_id)
+                if self._is_enabled_network(network_id):
+                    self.refresh_dhcp_helper(network_id)
+                    self.refresh_static_route(network_id)
         except:
             self.needs_resync = True
-            LOG.exception(_('Unable to sync static routes'))
+            LOG.exception(_('Unable to sync network state.'))
 
     def enable_dhcp_helper(self, network_id):
         """Enable DHCP for a network that meets enabling criteria."""
@@ -786,7 +808,8 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
             LOG.exception(_('Network %s RPC info call failed.'), network_id)
             return
 
-        if not network.admin_state_up:
+        if (not network.admin_state_up or
+            not self._is_enabled_network(network_id)):
             return
 
         for subnet in network.subnets:
