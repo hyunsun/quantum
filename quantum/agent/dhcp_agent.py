@@ -69,6 +69,10 @@ class DhcpAgent(manager.Manager):
                     help=_("Allows for serving metadata requests from a "
                            "dedicated network. Requires "
                            "enable_isolated_metadata = True")),
+        cfg.StrOpt('metadata_network', default="",
+                    help=_("Name of network to be used for metadata service. "
+                           "This option requires enable_isolated_metadata = True"
+                           "and use_namespaces = False")),
     ]
 
     def __init__(self, host=None):
@@ -592,7 +596,9 @@ class DeviceManager(object):
             ip_cidrs.append(ip_cidr)
 
         if self.conf.enable_isolated_metadata:
-            ip_cidrs.append(METADATA_DEFAULT_IP)
+            if (self.conf.use_namespaces or
+                self.conf.metadata_network == network.name):
+                ip_cidrs.append(METADATA_DEFAULT_IP)
 
         self.driver.init_l3(interface_name, ip_cidrs,
                             namespace=namespace)
@@ -786,11 +792,22 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
         for subnet in network.subnets:
             if subnet.enable_dhcp:
                 if self.call_driver('enable', network):
-                    if self.conf.enable_isolated_metadata:
+                    if (self.conf.enable_isolated_metadata and
+                        self.conf.metadata_network == network.name):
                         self.enable_isolated_metadata_proxy(network)
                     self.cache.put(network)
                     self.setup_dhcp_static_route(network)
                 break
+
+    def disable_dhcp_helper(self, network_id):
+        """Disable DHCP for a network known to the agent."""
+        network = self.cache.get_network_by_id(network_id)
+        if network:
+            if (self.conf.enable_isolated_metadata and
+                self.conf.metadata_network == network.name):
+                self.disable_isolated_metadata_proxy(network)
+            if self.call_driver('disable', network):
+                self.cache.remove(network)
 
     def refresh_dhcp_helper(self, network_id):
         """Refresh or disable DHCP for a network depending on the current state

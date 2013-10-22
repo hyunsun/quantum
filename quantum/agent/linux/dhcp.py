@@ -387,7 +387,9 @@ class Dnsmasq(DhcpLocalProcess):
             enable_metadata = (
                 self.conf.enable_isolated_metadata
                 and not subnet.gateway_ip
-                and subnet.ip_version == 4)
+                and subnet.ip_version == 4
+                and (self.conf.metadata_network == self.network.name
+                     or self.conf.use_namespaces))
 
             if enable_metadata and subnet_dhcp_ip:
                 host_routes.append(
