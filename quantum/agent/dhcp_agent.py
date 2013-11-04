@@ -826,8 +826,15 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
         """Disable DHCP for a network known to the agent."""
         network = self.cache.get_network_by_id(network_id)
         if network:
+            try:
+                network_info = self.plugin_rpc.get_network_info(network_id)
+            except:
+                self.needs_resync = True
+                LOG.exception(_('Network %s RPC info call failed.'), network_id)
+                return
+
             if (self.conf.enable_isolated_metadata and
-                self.conf.metadata_network == network.name):
+                self.conf.metadata_network == network_info.name):
                 self.disable_isolated_metadata_proxy(network)
             if self.call_driver('disable', network):
                 self.cache.remove(network)
