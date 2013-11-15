@@ -61,6 +61,7 @@ AGENT_TYPE_OVS = 'Open vSwitch agent'
 AGENT_TYPE_LINUXBRIDGE = 'Linux bridge agent'
 AGENT_TYPE_NEC = 'NEC plugin agent'
 AGENT_TYPE_L3 = 'L3 agent'
+AGENT_TYPE_METADATA = 'Metadata agent'
 L2_AGENT_TOPIC = 'N/A'
 
 PAGINATION_INFINITE = 'infinite'
