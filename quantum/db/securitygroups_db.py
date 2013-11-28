@@ -431,6 +431,10 @@ class SecurityGroupDbMixin(ext_sg.SecurityGroupPluginBase):
                                                  'tenant_id': tenant_id,
                                                  'description': 'default'}}
             ret = self.create_security_group(context, security_group, True)
+            for rule in ext_sg.sg_default_rules:
+                rule['security_group_rule']['tenant_id'] = tenant_id
+                rule['security_group_rule']['security_group_id'] = ret['id']
+                self.create_security_group_rule(context, rule)
             return ret['id']
         else:
             return default_group[0]['id']
