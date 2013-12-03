@@ -556,8 +556,9 @@ class DeviceManager(object):
         # There could be more than one dhcp server per network, so create
         # a device id that combines host and network ids
 
-        host_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname())
-        return 'dhcp%s-%s' % (host_uuid, network.id)
+        # NG-IPC fix
+        # Use the same IP and MAC address for dhcp port in a network.
+        return 'dhcp-%s' % network.id
 
     def get_dhcp_port(self, network):
         device_id = self.get_device_id(network)
@@ -959,7 +960,6 @@ class DhcpAgentWithStaticRoute(DhcpAgentWithStateReport):
                                  self.root_helper)
         for fixed_ip in dhcp_port.fixed_ips:
             device.route.del_route(fixed_ip.subnet.cidr)
-            device.route.add_route(fixed_ip.ip_address + '/32')
 
 def main():
     eventlet.monkey_patch()
