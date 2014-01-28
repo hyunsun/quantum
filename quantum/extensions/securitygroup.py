@@ -141,27 +141,6 @@ attr.validators['type:name_not_default'] = _validate_name_not_default
 
 sg_supported_protocols = [None, 'tcp', 'udp', 'icmp']
 sg_supported_ethertypes = ['IPv4', 'IPv6']
-sg_default_rules = [{'security_group_rule': {'direction': 'ingress',
-                                'protocol': 'tcp',
-                                'port_range_min': '22',
-                                'port_range_max': '22',
-                                'remote_ip_prefix': '0.0.0.0/0',
-                                'remote_group_id': None,
-                                'ethertype': 'IPv4'}},
-                     {'security_group_rule': {'direction': 'ingress',
-                                'protocol': 'tcp',
-                                'port_range_min': '9000',
-                                'port_range_max': '9000',
-                                'remote_ip_prefix': '0.0.0.0/0',
-                                'remote_group_id': None,
-                                'ethertype': 'IPv4'}},
-                     {'security_group_rule': {'direction': 'ingress',
-                                'protocol': 'icmp',
-                                'port_range_min': '-1',
-                                'port_range_max': '-1',
-                                'remote_ip_prefix': '0.0.0.0/0',
-                                'remote_group_id': None,
-                                'ethertype': 'IPv4'}}]
 
 # Attribute Map
 RESOURCE_ATTRIBUTE_MAP = {
