@@ -329,8 +329,6 @@ class QuantumDbPluginV2(quantum_plugin_base_v2.QuantumPluginBaseV2):
             models_v2.IPAllocation).with_lockmode('update')
         expired_qry = expired_qry.filter_by(network_id=network_id,
                                             port_id=None)
-        expired_qry = expired_qry.filter(
-            models_v2.IPAllocation.expiration <= timeutils.utcnow())
 
         for expired in expired_qry.all():
             QuantumDbPluginV2._recycle_ip(context,
