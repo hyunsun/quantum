@@ -484,8 +484,10 @@ class TestDnsmasq(TestBase):
 tag:tag0,option:dns-server,8.8.8.8
 tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
 tag:tag0,option:router,192.168.0.1
+tag:tag0,option:netmask,255.255.255.255
 tag:tag1,option:dns-server,%s
-tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
+tag:tag1,option:classless-static-route,%s,%s
+tag:tag1,option:netmask,255.255.255.255""".lstrip() % (fake_v6,
                                                             fake_v6_cidr,
                                                             fake_v6)
 
@@ -502,7 +504,8 @@ tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
         expected = """
 tag:tag0,option:dns-server,8.8.8.8
 tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
-tag:tag0,option:router,192.168.0.4""".lstrip()
+tag:tag0,option:router,192.168.0.4
+tag:tag0,option:netmask,255.255.255.255""".lstrip()
         with mock.patch('quantum.agent.linux.ip_lib.IPDevice') as ip_dev:
             ip_dev.return_value.addr.list.return_value = [
                 {'cidr': '192.168.0.4/24'}
@@ -520,7 +523,8 @@ tag:tag0,option:router,192.168.0.4""".lstrip()
         expected = """
 tag:tag0,option:dns-server,8.8.8.8
 tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
-tag:tag0,option:router,192.168.0.1""".lstrip()
+tag:tag0,option:router,192.168.0.1
+tag:tag0,option:netmask,255.255.255.255""".lstrip()
         with mock.patch.object(dhcp.Dnsmasq, 'get_conf_file_name') as conf_fn:
             conf_fn.return_value = '/foo/opts'
             dm = dhcp.Dnsmasq(self.conf, FakeDualNetworkSingleDHCP(),
@@ -533,7 +537,8 @@ tag:tag0,option:router,192.168.0.1""".lstrip()
         expected = """
 tag0,option:dns-server,8.8.8.8
 tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
-tag0,option:router,192.168.0.1""".lstrip()
+tag0,option:router,192.168.0.1
+tag0,option:netmask,255.255.255.255""".lstrip()
         with mock.patch.object(dhcp.Dnsmasq, 'get_conf_file_name') as conf_fn:
             conf_fn.return_value = '/foo/opts'
             dm = dhcp.Dnsmasq(self.conf, FakeDualNetworkSingleDHCP(),
@@ -545,8 +550,8 @@ tag0,option:router,192.168.0.1""".lstrip()
     def test_output_opts_file_no_gateway(self):
         expected = """
 tag:tag0,option:classless-static-route,169.254.169.254/32,192.168.1.1
-tag:tag0,option:router""".lstrip()
-
+tag:tag0,option:router
+tag:tag0,option:netmask,255.255.255.255""".lstrip()
         with mock.patch.object(dhcp.Dnsmasq, 'get_conf_file_name') as conf_fn:
             conf_fn.return_value = '/foo/opts'
             dm = dhcp.Dnsmasq(self.conf, FakeV4NoGatewayNetwork(),
@@ -575,8 +580,10 @@ tag:tag0,option:router""".lstrip()
 tag:tag0,option:dns-server,8.8.8.8
 tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
 tag:tag0,option:router,192.168.0.1
+tag:tag0,option:netmask,255.255.255.255
 tag:tag1,option:dns-server,%s
-tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
+tag:tag1,option:classless-static-route,%s,%s
+tag:tag1,option:netmask,255.255.255.255""".lstrip() % (fake_v6,
                                                             fake_v6_cidr,
                                                             fake_v6)
 
@@ -620,8 +627,10 @@ tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
 tag:tag0,option:dns-server,8.8.8.8
 tag:tag0,option:classless-static-route,20.0.0.1/24,20.0.0.1
 tag:tag0,option:router,192.168.0.1
+tag:tag0,option:netmask,255.255.255.255
 tag:tag1,option:dns-server,%s
-tag:tag1,option:classless-static-route,%s,%s""".lstrip() % (fake_v6,
+tag:tag1,option:classless-static-route,%s,%s
+tag:tag1,option:netmask,255.255.255.255""".lstrip() % (fake_v6,
                                                             fake_v6_cidr,
                                                             fake_v6)
 
