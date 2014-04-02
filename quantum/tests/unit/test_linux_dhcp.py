@@ -102,6 +102,7 @@ class FakeV4SubnetNoGateway:
     enable_dhcp = True
     host_routes = []
     dns_nameservers = []
+    name = 'FakeV4SubnetNoGateway'
 
 
 class FakeV4Network:
@@ -132,6 +133,7 @@ class FakeV4NoGatewayNetwork:
     id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
     subnets = [FakeV4SubnetNoGateway()]
     ports = [FakePort1()]
+    name = 'FakeV4NoGatewayNetwork'
 
 
 class TestDhcpBase(base.BaseTestCase):
@@ -203,6 +205,8 @@ class TestBase(base.BaseTestCase):
                                            default=True))
         self.conf.register_opt(cfg.BoolOpt('enable_multi_host',
                                            default=False))
+        self.conf.register_opt(cfg.StrOpt('metadata_network',
+                                          default=None))
         self.conf(args=args)
         self.conf.set_override('state_path', '')
         self.conf.use_namespaces = True
@@ -553,6 +557,8 @@ tag:tag0,option:classless-static-route,169.254.169.254/32,192.168.1.1
 tag:tag0,option:router
 tag:tag0,option:netmask,255.255.255.255""".lstrip()
         with mock.patch.object(dhcp.Dnsmasq, 'get_conf_file_name') as conf_fn:
+            self.conf.set_override('metadata_network',
+                                   FakeV4SubnetNoGateway.name)
             conf_fn.return_value = '/foo/opts'
             dm = dhcp.Dnsmasq(self.conf, FakeV4NoGatewayNetwork(),
                               version=float(2.59))
