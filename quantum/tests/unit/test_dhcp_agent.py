@@ -1121,8 +1121,7 @@ class TestDeviceManager(base.BaseTestCase):
     def test_get_device_id(self):
         fake_network = FakeModel('12345678-1234-5678-1234567890ab',
                                  tenant_id='aaaaaaaa-aaaa-aaaa-aaaaaaaaaaaa')
-        expected = ('dhcp1ae5f96c-c527-5079-82ea-371a01645457-12345678-1234-'
-                    '5678-1234567890ab')
+        expected = ('dhcp-12345678-1234-5678-1234567890ab')
 
         with mock.patch('socket.gethostbyname') as get_host:
             with mock.patch('uuid.uuid5') as uuid5:
