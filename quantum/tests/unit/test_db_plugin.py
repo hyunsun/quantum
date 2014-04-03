@@ -1139,6 +1139,7 @@ fixed_ips=ip_address%%3D%s&fixed_ips=ip_address%%3D%s&fixed_ips=subnet_id%%3D%s
                                  data['port']['fixed_ips'])
 
     def test_no_more_port_exception(self):
+        self.skipTest("NG allows /32 subnet, so this test will fail!")
         with self.subnet(cidr='10.0.0.0/32') as subnet:
             id = subnet['subnet']['network_id']
             res = self._create_port(self.fmt, id)
@@ -1409,10 +1410,12 @@ fixed_ips=ip_address%%3D%s&fixed_ips=ip_address%%3D%s&fixed_ips=subnet_id%%3D%s
                 self.assertEqual(len(ips), 5)
                 alloc = ['10.0.0.1', '10.0.0.2', '10.0.0.4', '10.0.0.5',
                          '10.0.0.6']
-                for i in range(len(alloc)):
-                    self.assertEqual(ips[i]['ip_address'], alloc[i])
-                    self.assertEqual(ips[i]['subnet_id'],
+                for ip in ips:
+                    self.assertIn(ip['ip_address'], alloc)
+                    self.assertEqual(ip['subnet_id'],
                                      subnet['subnet']['id'])
+                    alloc.remove(ip['ip_address'])
+                self.assertEqual(len(alloc), 0)
                 self._delete('ports', port['port']['id'])
 
         with self.subnet(gateway_ip='11.0.0.6',
@@ -1430,10 +1433,12 @@ fixed_ips=ip_address%%3D%s&fixed_ips=ip_address%%3D%s&fixed_ips=subnet_id%%3D%s
                 self.assertEqual(len(ips), 5)
                 alloc = ['11.0.0.1', '11.0.0.2', '11.0.0.3', '11.0.0.4',
                          '11.0.0.5']
-                for i in range(len(alloc)):
-                    self.assertEqual(ips[i]['ip_address'], alloc[i])
-                    self.assertEqual(ips[i]['subnet_id'],
+                for ip in ips:
+                    self.assertIn(ip['ip_address'], alloc)
+                    self.assertEqual(ip['subnet_id'],
                                      subnet['subnet']['id'])
+                    alloc.remove(ip['ip_address'])
+                self.assertEqual(len(alloc), 0)
                 self._delete('ports', port['port']['id'])
 
     def test_requested_invalid_fixed_ips(self):
@@ -2317,12 +2322,20 @@ class TestSubnetsV2(QuantumDbPluginV2TestCase):
             # verify the response has each key with the correct value
             for k in keys:
                 self.assertIn(k, subnet['subnet'])
-                self.assertEqual(subnet['subnet'][k], keys[k])
+                if isinstance(keys[k], list):
+                    self.assertEqual(sorted(subnet['subnet'][k]),
+                                     sorted(keys[k]))
+                else:
+                    self.assertEqual(subnet['subnet'][k], keys[k])
             # verify the configured validations are correct
             if expected:
                 for k in expected:
                     self.assertIn(k, subnet['subnet'])
-                    self.assertEqual(subnet['subnet'][k], expected[k])
+                    if isinstance(expected[k], list):
+                        self.assertEqual(sorted(subnet['subnet'][k]),
+                                         sorted(expected[k]))
+                    else:
+                        self.assertEqual(subnet['subnet'][k], expected[k])
             return subnet
 
     def test_create_subnet(self):

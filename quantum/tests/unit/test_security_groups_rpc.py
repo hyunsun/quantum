@@ -990,9 +990,9 @@ class TestSecurityGroupAgentWithIptables(base.BaseTestCase):
     def setUp(self):
         super(TestSecurityGroupAgentWithIptables, self).setUp()
         self.mox = mox.Mox()
-        agent_opts = [
-            cfg.StrOpt('root_helper', default='sudo'),
-        ]
+        agent_opts = []
+        if not hasattr(cfg.CONF, 'root_helper'):
+            agent_opts.append(cfg.StrOpt('root_helper', default='sudo')) 
 
         cfg.CONF.register_opts(agent_opts, "AGENT")
         cfg.CONF.set_override(
