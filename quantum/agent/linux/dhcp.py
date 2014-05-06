@@ -301,11 +301,16 @@ class Dnsmasq(DhcpLocalProcess):
                 set_tag = 'set:'
             else:
                 set_tag = ''
-            cmd.append('--dhcp-range=%s%s,%s,%s,%ss' %
+
+            if self.conf.dhcp_lease_duration == -1:
+                lease = 'infinite'
+            else:
+                lease = '%ss' % self.conf.dhcp_lease_duration
+
+            cmd.append('--dhcp-range=%s%s,%s,%s,%s' %
                        (set_tag, self._TAG_PREFIX % i,
                         netaddr.IPNetwork(subnet.cidr).network,
-                        mode,
-                        self.conf.dhcp_lease_duration))
+                        mode, lease))
 
         cmd.append('--conf-file=%s' % self.conf.dnsmasq_config_file)
         if self.conf.dnsmasq_dns_server:
