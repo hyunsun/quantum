@@ -29,6 +29,7 @@ FAKE_PREFIX = {'IPv4': '10.0.0.0/24',
                'IPv6': 'fe80::0/48'}
 FAKE_IP = {'IPv4': '10.0.0.1',
            'IPv6': 'fe80::1'}
+FAKE_DHCP = '10.0.0.254'
 
 
 class IptablesFirewallTestCase(base.BaseTestCase):
@@ -57,7 +58,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
         return {'device': 'tapfake_dev',
                 'mac_address': 'ff:ff:ff:ff',
                 'fixed_ips': [FAKE_IP['IPv4'],
-                              FAKE_IP['IPv6']]}
+                              FAKE_IP['IPv6']],
+                'dhcp_ips': [FAKE_DHCP]}
 
     def test_prepare_port_filter_with_no_sg(self):
         port = self._fake_port()
@@ -108,6 +110,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-m state --state ESTABLISHED,RELATED -j RETURN'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % FAKE_DHCP),
                  call.add_rule('ofake_dev', '-j $sg-fallback'),
                  call.add_rule('sg-chain', '-j ACCEPT')]
 
@@ -765,6 +769,11 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                   'ofake_dev',
                   '-m state --state ESTABLISHED,RELATED -j RETURN')]
 
+        if ethertype == 'IPv4':
+            calls.append(call.add_rule(
+                'ofake_dev',
+                '-d %s -j DROP' % FAKE_DHCP))
+
         if egress_expected_call:
             calls.append(egress_expected_call)
 
@@ -834,6 +843,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-m state --state ESTABLISHED,RELATED -j RETURN'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % FAKE_DHCP),
                  call.add_rule('ofake_dev', '-j $sg-fallback'),
                  call.add_rule('sg-chain', '-j ACCEPT'),
                  call.ensure_remove_chain('ifake_dev'),
@@ -884,6 +895,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-m state --state ESTABLISHED,RELATED -j RETURN'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % FAKE_DHCP),
                  call.add_rule('ofake_dev', '-j RETURN'),
                  call.add_rule('ofake_dev', '-j $sg-fallback'),
                  call.add_rule('sg-chain', '-j ACCEPT'),
@@ -919,7 +932,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
     def test_ip_spoofing_filter_with_multiple_ips(self):
         port = {'device': 'tapfake_dev',
                 'mac_address': 'ff:ff:ff:ff',
-                'fixed_ips': ['10.0.0.1', 'fe80::1', '10.0.0.2']}
+                'fixed_ips': ['10.0.0.1', 'fe80::1', '10.0.0.2'],
+                'dhcp_ips': ['10.0.0.254']}
         self.firewall.prepare_port_filter(port)
         calls = [call.add_chain('sg-fallback'),
                  call.add_rule('sg-fallback', '-j DROP'),
@@ -971,6 +985,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-m state --state ESTABLISHED,RELATED -j RETURN'),
+                 call.add_rule(
+                     'ofake_dev', '-d 10.0.0.254 -j DROP'),
                  call.add_rule('ofake_dev', '-j $sg-fallback'),
                  call.add_rule('sg-chain', '-j ACCEPT')]
         self.v4filter_inst.assert_has_calls(calls)

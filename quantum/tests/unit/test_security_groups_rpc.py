@@ -632,6 +632,7 @@ IPTABLES_FILTER_1 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port1 -j RETURN
 -A %(bn)s-o_port1 -j %(bn)s-sg-fallback
 -A %(bn)s-sg-chain -j ACCEPT
@@ -670,6 +671,7 @@ IPTABLES_FILTER_1_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port1 -j RETURN
 -A %(bn)s-o_port1 -j %(bn)s-sg-fallback
 -A %(bn)s-sg-chain -j ACCEPT
@@ -712,6 +714,7 @@ IPTABLES_FILTER_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port1 -j RETURN
 -A %(bn)s-o_port1 -j %(bn)s-sg-fallback
 -A %(bn)s-FORWARD %(physdev)s --physdev-INGRESS tap_port2 -j %(bn)s-sg-chain
@@ -731,6 +734,7 @@ IPTABLES_FILTER_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port2 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port2 -j RETURN
 -A %(bn)s-o_port2 -j %(bn)s-sg-fallback
 -A %(bn)s-sg-chain -j ACCEPT
@@ -770,6 +774,7 @@ IPTABLES_FILTER_2_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port1 -j RETURN
 -A %(bn)s-o_port1 -j %(bn)s-sg-fallback
 -A %(bn)s-FORWARD %(physdev)s --physdev-INGRESS tap_port2 -j %(bn)s-sg-chain
@@ -789,6 +794,7 @@ IPTABLES_FILTER_2_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port2 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port2 -j RETURN
 -A %(bn)s-o_port2 -j %(bn)s-sg-fallback
 -A %(bn)s-sg-chain -j ACCEPT
@@ -830,6 +836,7 @@ IPTABLES_FILTER_2_3 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port1 -j RETURN
 -A %(bn)s-o_port1 -j %(bn)s-sg-fallback
 -A %(bn)s-FORWARD %(physdev)s --physdev-INGRESS tap_port2 -j %(bn)s-sg-chain
@@ -850,6 +857,7 @@ IPTABLES_FILTER_2_3 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
+-A %(bn)s-o_port2 -d 10.0.0.2 -j DROP
 -A %(bn)s-o_port2 -j RETURN
 -A %(bn)s-o_port2 -j %(bn)s-sg-fallback
 -A %(bn)s-sg-chain -j ACCEPT
@@ -1073,7 +1081,8 @@ class TestSecurityGroupAgentWithIptables(base.BaseTestCase):
                 'security_groups': ['security_group1'],
                 'security_group_rules': rule,
                 'security_group_source_groups': [
-                    'security_group1']}
+                    'security_group1'],
+                'dhcp_ips': ['10.0.0.2']}
 
     def _regex(self, value):
         value = value.replace('physdev-INGRESS', self.PHYSDEV_INGRESS)
