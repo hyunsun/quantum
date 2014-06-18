@@ -279,6 +279,7 @@ class SecurityGroupServerRpcCallbackMixin(object):
         for port in ports.values():
             self._add_ingress_ra_rule(port, ips)
             self._add_ingress_dhcp_rule(port, ips)
+            port['dhcp_ips'] = ips.get(port['network_id'])
 
     def _security_group_rules_for_ports(self, context, ports):
         rules_in_db = self._select_rules_for_ports(context, ports)
