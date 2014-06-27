@@ -630,6 +630,8 @@ IPTABLES_FILTER_1 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port1 ! -s 10.0.0.3 -j DROP
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port1 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port1 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
@@ -669,6 +671,8 @@ IPTABLES_FILTER_1_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port1 ! -s 10.0.0.3 -j DROP
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port1 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port1 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
@@ -712,6 +716,8 @@ IPTABLES_FILTER_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port1 ! -s 10.0.0.3 -j DROP
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port1 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port1 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
@@ -732,6 +738,8 @@ IPTABLES_FILTER_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port2 ! -s 10.0.0.4 -j DROP
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port2 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port2 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port2 -d 10.0.0.2 -j DROP
@@ -772,6 +780,8 @@ IPTABLES_FILTER_2_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port1 ! -s 10.0.0.3 -j DROP
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port1 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port1 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
@@ -792,6 +802,8 @@ IPTABLES_FILTER_2_2 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port2 ! -s 10.0.0.4 -j DROP
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port2 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port2 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port2 -d 10.0.0.2 -j DROP
@@ -834,6 +846,8 @@ IPTABLES_FILTER_2_3 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port1 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port1 ! -s 10.0.0.3 -j DROP
 -A %(bn)s-o_port1 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port1 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port1 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port1 -m state --state INVALID -j DROP
 -A %(bn)s-o_port1 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port1 -d 10.0.0.2 -j DROP
@@ -855,6 +869,8 @@ IPTABLES_FILTER_2_3 = """:%(bn)s-(%(chains)s) - [0:0]
 -A %(bn)s-o_port2 -p udp --sport 68 --dport 67 -j RETURN
 -A %(bn)s-o_port2 ! -s 10.0.0.4 -j DROP
 -A %(bn)s-o_port2 -p udp --sport 67 --dport 68 -j DROP
+-A %(bn)s-o_port2 -d 169.254.169.254 -p tcp --dport 80 -m quota --quota 1048576 -j RETURN
+-A %(bn)s-o_port2 -d 169.254.169.254 -j DROP
 -A %(bn)s-o_port2 -m state --state INVALID -j DROP
 -A %(bn)s-o_port2 -m state --state ESTABLISHED,RELATED -j RETURN
 -A %(bn)s-o_port2 -d 10.0.0.2 -j DROP

@@ -30,6 +30,7 @@ FAKE_PREFIX = {'IPv4': '10.0.0.0/24',
 FAKE_IP = {'IPv4': '10.0.0.1',
            'IPv6': 'fe80::1'}
 FAKE_DHCP = '10.0.0.254'
+METADATA_IP = '169.254.169.254'
 
 
 class IptablesFirewallTestCase(base.BaseTestCase):
@@ -105,6 +106,11 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-p udp --sport 67 --dport 68 -j DROP'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -p tcp --dport 80 -m quota '
+                     '--quota 1048576 -j RETURN' % METADATA_IP),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP'% METADATA_IP),
                  call.add_rule(
                      'ofake_dev', '-m state --state INVALID -j DROP'),
                  call.add_rule(
@@ -759,9 +765,14 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                   call.add_rule('ofake_dev', '! -s %s -j DROP' % prefix)]
 
         if ethertype == 'IPv4':
-            calls.append(call.add_rule(
-                'ofake_dev',
-                '-p udp --sport 67 --dport 68 -j DROP'))
+            calls += [call.add_rule(
+                      'ofake_dev', '-p udp --sport 67 --dport 68 -j DROP'),
+                      call.add_rule(
+                      'ofake_dev',
+                      '-d %s -p tcp --dport 80 -m quota --quota 1048576 '
+                      '-j RETURN' % METADATA_IP),
+                      call.add_rule(
+                      'ofake_dev', '-d %s -j DROP' % METADATA_IP)]
 
         calls += [call.add_rule(
                   'ofake_dev', '-m state --state INVALID -j DROP'),
@@ -770,9 +781,8 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                   '-m state --state ESTABLISHED,RELATED -j RETURN')]
 
         if ethertype == 'IPv4':
-            calls.append(call.add_rule(
-                'ofake_dev',
-                '-d %s -j DROP' % FAKE_DHCP))
+            calls += [call.add_rule(
+                      'ofake_dev', '-d %s -j DROP' % FAKE_DHCP)]
 
         if egress_expected_call:
             calls.append(egress_expected_call)
@@ -839,6 +849,11 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                      'ofake_dev',
                      '-p udp --sport 67 --dport 68 -j DROP'),
                  call.add_rule(
+                     'ofake_dev', '-d %s -p tcp --dport 80 -m quota '
+                     '--quota 1048576 -j RETURN' % METADATA_IP),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % METADATA_IP),
+                 call.add_rule(
                      'ofake_dev', '-m state --state INVALID -j DROP'),
                  call.add_rule(
                      'ofake_dev',
@@ -890,6 +905,11 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                      'ofake_dev', '! -s 10.0.0.1 -j DROP'),
                  call.add_rule(
                      'ofake_dev', '-p udp --sport 67 --dport 68 -j DROP'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -p tcp --dport 80 -m quota '
+                     '--quota 1048576 -j RETURN' % METADATA_IP),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % METADATA_IP),
                  call.add_rule(
                      'ofake_dev', '-m state --state INVALID -j DROP'),
                  call.add_rule(
@@ -980,6 +1000,11 @@ class IptablesFirewallTestCase(base.BaseTestCase):
                  call.add_rule(
                      'ofake_dev',
                      '-p udp --sport 67 --dport 68 -j DROP'),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -p tcp --dport 80 -m quota '
+                     '--quota 1048576 -j RETURN' % METADATA_IP),
+                 call.add_rule(
+                     'ofake_dev', '-d %s -j DROP' % METADATA_IP),
                  call.add_rule(
                      'ofake_dev', '-m state --state INVALID -j DROP'),
                  call.add_rule(
