@@ -33,6 +33,7 @@ CHAIN_NAME_PREFIX = {INGRESS_DIRECTION: 'i',
                      EGRESS_DIRECTION: 'o',
                      IP_SPOOF_FILTER: 's'}
 LINUX_DEV_LEN = 14
+METADATA_DEFAULT_IP = '169.254.169.254'
 
 
 class IptablesFirewallDriver(firewall.FirewallDriver):
@@ -209,6 +210,19 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
         #Note(nati) Drop dhcp packet from VM
         return ['-p udp --sport 67 --dport 68 -j DROP']
 
+    def _apply_metadata_quota(self):
+        return ['-d %s -p tcp --dport 80 -m quota --quota 1048576 '
+                '-j RETURN' % METADATA_DEFAULT_IP,
+                '-d %s -j DROP' % METADATA_DEFAULT_IP]
+
+    def _drop_dhcp_access_rule(self, port):
+        iptables_rules = []
+        for dhcp_ip in port['dhcp_ips']:
+            if not netaddr.IPAddress(dhcp_ip).version == 4:
+                return
+            iptables_rules += ["-d %s -j DROP" % dhcp_ip]
+        return iptables_rules
+
     def _add_rule_by_security_group(self, port, direction):
         chain_name = self._port_chain_name(port, direction)
         # select rules for current direction
@@ -228,7 +242,8 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
                                    ipv4_iptables_rule,
                                    ipv6_iptables_rule)
             ipv4_iptables_rule += self._drop_dhcp_rule()
-            self._drop_dhcp_access_rule(port, extra_egress_rule)
+            ipv4_iptables_rule += self._apply_metadata_quota()
+            extra_egress_rule = self._drop_dhcp_access_rule(port)
         ipv4_iptables_rule += self._convert_sgr_to_iptables_rules(
             ipv4_sg_rules, extra_egress_rule)
         ipv6_iptables_rule += self._convert_sgr_to_iptables_rules(
@@ -275,12 +290,6 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
         # Allow established connections
         iptables_rules += ['-m state --state ESTABLISHED,RELATED -j RETURN']
         return iptables_rules
-
-    def _drop_dhcp_access_rule(self, port, iptables_rules):
-        for dhcp_ip in port['dhcp_ips']:
-            if not netaddr.IPAddress(dhcp_ip).version == 4:
-                return
-            iptables_rules += ["-d %s -j DROP" % dhcp_ip]
 
     def _protocol_arg(self, protocol):
         if protocol:
