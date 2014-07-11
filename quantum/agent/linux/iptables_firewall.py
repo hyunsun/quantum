@@ -34,6 +34,7 @@ CHAIN_NAME_PREFIX = {INGRESS_DIRECTION: 'i',
                      IP_SPOOF_FILTER: 's'}
 LINUX_DEV_LEN = 14
 METADATA_DEFAULT_IP = '169.254.169.254'
+DSR_PROTOCOL = 'dsr'
 
 
 class IptablesFirewallDriver(firewall.FirewallDriver):
@@ -190,7 +191,8 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
             table.add_rule(chain_name, '-j DROP')
             rules.append('-j $%s' % chain_name)
 
-    def _ip_spoofing_rule(self, port, ipv4_rules, ipv6_rules):
+    def _ip_spoofing_rule(self, port, ipv4_sg_rules,
+                          ipv4_rules, ipv6_rules):
         #Note(nati) allow dhcp or RA packet
         ipv4_rules += ['-p udp --sport 68 --dport 67 -j RETURN']
         ipv6_rules += ['-p icmpv6 -j RETURN']
@@ -201,6 +203,11 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
                 ipv4_addresses.append(ip)
             else:
                 ipv6_addresses.append(ip)
+        for rule in ipv4_sg_rules:
+            if rule.get('protocol') == DSR_PROTOCOL:
+               ipv4_addresses.append(
+                   netaddr.IPNetwork(rule.get('dest_ip_prefix')).ip)
+                
         self._setup_ip_spoof_filter_chain(port, self.iptables.ipv4['filter'],
                                           ipv4_addresses, ipv4_rules)
         self._setup_ip_spoof_filter_chain(port, self.iptables.ipv6['filter'],
@@ -239,6 +246,7 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
             ipv4_iptables_rule += self._arp_spoofing_rule(port)
             ipv6_iptables_rule += self._arp_spoofing_rule(port)
             self._ip_spoofing_rule(port,
+                                   ipv4_sg_rules,
                                    ipv4_iptables_rule,
                                    ipv6_iptables_rule)
             ipv4_iptables_rule += self._drop_dhcp_rule()
@@ -255,12 +263,14 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
     def _convert_sgr_to_iptables_rules(self, security_group_rules, 
                                        extra_egress_rule=[]):
         iptables_rules = []
-        self._drop_invalid_packets(iptables_rules)
+        self._drop_invalid_packets(security_group_rules, iptables_rules)
         self._allow_established(iptables_rules)
         # add drop access to DHCP server rule after allow establish rule
         # to allow access from DHCP server to VM 
         iptables_rules += extra_egress_rule
         for rule in security_group_rules:
+            if rule.get('protocol') == DSR_PROTOCOL:
+                continue
             args = ['-j RETURN']
             args += self._protocol_arg(rule.get('protocol'))
             args += self._port_arg('dport',
@@ -281,8 +291,12 @@ class IptablesFirewallDriver(firewall.FirewallDriver):
 
         return iptables_rules
 
-    def _drop_invalid_packets(self, iptables_rules):
-        # Always drop invalid packets
+    def _drop_invalid_packets(self, security_group_rules, iptables_rules):
+        # Always drop invalid packets except for the packets with DSR VIP
+        for rule in security_group_rules:
+            if rule.get('protocol') == DSR_PROTOCOL:
+                iptables_rules += ['-s %s -m state --state INVALID -j RETURN'
+                    % netaddr.IPNetwork(rule.get('dest_ip_prefix')).ip]
         iptables_rules += ['-m state --state ' 'INVALID -j DROP']
         return iptables_rules
 
